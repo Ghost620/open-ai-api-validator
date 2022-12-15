@@ -1,8 +1,10 @@
-import express from "express";
-import cors from "cors"
-import bodyParser from "body-parser";
-import axios from "axios";
-import csv from "csvtojson"
+const express = require("express")
+const cors = require("cors")
+const bodyParser = require("body-parser")
+const axios = require("axios")
+const fs = require("fs").promises
+const fss = require("fs");
+const { Configuration, OpenAIApi } = require("openai");
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -11,8 +13,7 @@ app.use(bodyParser.urlencoded({extended: false}))
 app.use(express.json())
 
 app.get('/', (req, res) => {
-    res.send('hello')
-
+    res.status(404).send({'error': 'Not found'})
 })
 
 app.post('/create-open-ai-model', async(req, res) => {
@@ -20,12 +21,12 @@ app.post('/create-open-ai-model', async(req, res) => {
     const dataKeys = Array.from(Object.keys(data))
     
     var cond = false;
-    cond = dataKeys.includes("csvUrl") && data['csvUrl'] != '' ? dataKeys.includes("apiKey") && data['apiKey'] != '' ? dataKeys.includes("model") && data['model'] != '' ? true : res.send("Model not provided") : res.send("API key not provided") : res.send("CSV URL not provided")
+    cond = dataKeys.includes("csvUrl") && data['csvUrl'] != '' ? dataKeys.includes("apiKey") && data['apiKey'] != '' ? dataKeys.includes("model") && data['model'] != '' ? true : res.status(500).send({'error': "Model not provided"}) : res.status(500).send({'error': "API key not provided"}) : res.status(500).send({'error': "CSV URL not provided"})
 
     if (cond) {
 
         if (!data['csvUrl'].includes('.csv')) {
-            res.send("Invalid file format")
+            res.status(500).send({'error': "Invalid file format"})
         } else {
 
             const response = await axios.get(data['csvUrl'])
@@ -42,39 +43,41 @@ app.post('/create-open-ai-model', async(req, res) => {
                         "completion": csv_data_splitted[index].split(',')[1].trim() + "###"
                     }
                     arr.push(json_data)
-
                 }
-                res.send(arr)
+                await fs.writeFile("file.jsonl", JSON.stringify(arr).replace('[', '').replace(']', '').replaceAll('},{', '}\n{'))
 
-                var config = {
-                    method: 'post',
-                    url: 'https://api.openai.com/v1/files',
-                    headers: { 
-                      'Authorization': `Bearer ${data['apiKey']}`
-                    }, 
-                    data: JSON.stringify({
-                        "file": json_data,
-                        "purpose": "fine-tune"
-                      })
-                  };
-                  
-                  const response = await axios(config)
-                  console.log(response)
-                  res.send("kuch bhi")
-                  
+                const configuration = new Configuration({
+                    apiKey: data['apiKey'],
+                });
+                const openai = new OpenAIApi(configuration);
+                const responses = await openai.createFile(
+                fss.createReadStream("file.jsonl"),
+                "fine-tune"
+                );
 
+                if (responses.status != 200){
+                    res.status(responses.status).send({'error': responses.error, 'message': "error from Open AI request"})
+                } else {
+                    const response2 = await openai.createFineTune({
+                        training_file: responses.data.id,
+                        model: data['model'],
+                        n_epochs: data['n_epochs'] ? data['n_epochs'] : 2
+                    });
 
+                    if (response2.status == 200){
+                        res.status(200).send({"message": "Success", "id": response2.data.id})
+                    } else {
+                        res.status(response2.status).send({'error': response2.error, 'message': "error from Open AI request"})
+                    }
+                }
+                
             } else {
-                res.send("Invalid column headers")
+                res.status(500).send({'error': "Invalid column headers"})
             }
         }
-
     }
-
-    // res.send("HUH")
-
 })
 
 app.listen(port, ()=> {
-    console.log('listening')
+    console.log(`listening on PORT: ${port}`)
 })
