@@ -53,7 +53,7 @@ app.post('/create-open-ai-model', async (req, res) => {
           condi = false
           res.status(500).send({ 'error': "Model is incorrect" })
           break;
-      }
+        }
 
       if (condi == true) {
         count = count * n
@@ -139,28 +139,35 @@ app.post('/open-ai-models', async (req, res) => {
 
     if (dataKeys2.includes("apiKey")){
 
-        const configuration = new Configuration({
-            apiKey: data2['apiKey'],
-        });
-        const openai = new OpenAIApi(configuration);
-        const latest_response = await openai.listFineTunes();
+        try {
 
-        var result = latest_response.data.data.map(function (item) {
-            return {
-                id: item.id,
-                n_epochs: item.hyperparams.n_epochs,
-                model: item.model,
-                status: item.status,
-                created_at: item.created_at,
-                fine_tuned_model: item.fine_tuned_model
-            };
-        });
+            const configuration = new Configuration({
+                apiKey: data2['apiKey'],
+            });
+            const openai = new OpenAIApi(configuration);
+            const latest_response = await openai.listFineTunes();
 
-        const data = {
-            "data": result
+            if (latest_response.status != 200) {
+                res.status(latest_response.status).send({ 'error': latest_response.error, 'message': "error from Open AI request" })
+            } else {
+
+                var result = latest_response.data.data.map(function (item) {
+                    return {
+                        id: item.id,
+                        n_epochs: item.hyperparams.n_epochs,
+                        model: item.model,
+                        status: item.status,
+                        created_at: item.created_at,
+                        fine_tuned_model: item.fine_tuned_model
+                    };
+                });
+
+                res.status(200).send(result)
+            }
+
+        } catch(err) {
+            res.status(401).send({ 'error': "Invalid Credentials (Incorrect API Key)" })
         }
-
-        res.status(200).send(data)
 
     } else {
         res.status(500).send({ 'error': "No API key found" })
