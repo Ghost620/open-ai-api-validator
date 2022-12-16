@@ -142,7 +142,7 @@ app.post('/open-ai-models', async (req, res) => {
         try {
 
             const configuration = new Configuration({
-                apiKey: data2['apiKey'],
+              apiKey: data2['apiKey'],
             });
             const openai = new OpenAIApi(configuration);
             const latest_response = await openai.listFineTunes();
@@ -151,18 +151,18 @@ app.post('/open-ai-models', async (req, res) => {
                 res.status(latest_response.status).send({ 'error': latest_response.error, 'message': "error from Open AI request" })
             } else {
 
-                var result = latest_response.data.data.map(function (item) {
+                var result = latest_response.data.data.map( (item) => {
                     return {
                         id: item.id,
                         n_epochs: item.hyperparams.n_epochs,
                         model: item.model,
                         status: item.status,
-                        created_at: item.created_at,
+                        created_at: new Date(item.created_at).toDateString(),
                         fine_tuned_model: item.fine_tuned_model
                     };
                 });
 
-                res.status(200).send(result)
+                res.status(200).send(result.reverse())
             }
 
         } catch(err) {
