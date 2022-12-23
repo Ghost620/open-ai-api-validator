@@ -6,6 +6,7 @@ const axios = require("axios")
 const fs = require("fs").promises
 const fss = require("fs");
 const { Configuration, OpenAIApi } = require("openai");
+const csv = require('csv-parser')
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -77,54 +78,67 @@ app.post('/create-open-ai-model', async (req, res) => {
       if (!data['csvUrl'].includes('.csv')) {
         res.status(500).send({ 'error': "Invalid file format" })
       } else {
+        var arr = []
+        await axios.get(data['csvUrl'])
+        .then(async response => {
 
-        const response = await axios.get(data['csvUrl'])
-        const csv_data = await response.data
+          var header_splitted = response.data.replaceAll('\r', '').split('\n')
 
-        var csv_data_splitted = csv_data.replaceAll('\r', '').split('\n')
-        if (csv_data_splitted[0].includes('prompt,completion')) {
-
-          var arr = [];
-          for (let index = 1; index < csv_data_splitted.length; index++) {
-
-            var json_data = {
-              "prompt": csv_data_splitted[index].split(',')[0].trim() + "\n\n###\n\n",
-              "completion": csv_data_splitted[index].split(',')[1].trim() + "###"
-            }
-            arr.push(json_data)
-          }
-          const filename = uuidv4() + '.jsonl';
-          await fs.writeFile(filename, JSON.stringify(arr).replace('[', '').replace(']', '').replaceAll('},{', '}\n{'))
-
-          const configuration = new Configuration({
-            apiKey: data['apiKey'],
-          });
-          const openai = new OpenAIApi(configuration);
-          const responses = await openai.createFile(
-            fss.createReadStream(filename),
-            "fine-tune"
-          );
-          await fs.unlink(filename)
-
-          if (responses.status != 200) {
-            res.status(responses.status).send({ 'error': responses.error, 'message': "error from Open AI request" })
+          if (header_splitted[0].includes('prompt,completion')) {
+            const response = await axios.get(data['csvUrl'],{ responseType: "stream",});
+            response.data
+              .pipe(csv())
+              .on("data", function (row) {
+                arr.push(row);
+              })
+              .on("end", async function () {
+  
+                arr.map((item) => {
+                  item.prompt = item.prompt + "\n\n###\n\n",
+                  item.completion = item.completion + "###"
+                })
+  
+                const filename = uuidv4() + '.jsonl';
+                await fs.writeFile(filename, JSON.stringify(arr).replace('[', '').replace(']', '').replaceAll('},{', '}\n{'))
+  
+                const configuration = new Configuration({
+                  apiKey: data['apiKey'],
+                });
+                const openai = new OpenAIApi(configuration);
+                const responses = await openai.createFile(
+                  fss.createReadStream(filename),
+                  "fine-tune"
+                );
+                await fs.unlink(filename)
+  
+                if (responses.status != 200) {
+                  res.status(responses.status).send({ 'error': responses.error, 'message': "error from Open AI request" })
+                } else {
+                  const response2 = await openai.createFineTune({
+                    training_file: responses.data.id,
+                    model: data['model'],
+                    n_epochs: data['n_epochs'] ? data['n_epochs'] : 2
+                  });
+                  
+                  if (response2.status == 200) {
+                    res.status(200).send({ "message": "Success", "id": response2.data.id })
+                  } else {
+                    res.status(response2.status).send({ 'error': response2.error, 'message': "error from Open AI request" })
+                  }
+                }
+  
+              })
+              .on("error", function (error) {
+                console.log('IDHR')
+                res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL"  })
+              });
+  
           } else {
-            const response2 = await openai.createFineTune({
-              training_file: responses.data.id,
-              model: data['model'],
-              n_epochs: data['n_epochs'] ? data['n_epochs'] : 2
-            });
-
-            if (response2.status == 200) {
-              res.status(200).send({ "message": "Success", "id": response2.data.id })
-            } else {
-              res.status(response2.status).send({ 'error': response2.error, 'message': "error from Open AI request" })
-            }
+            res.status(500).send({ 'error': "Invalid column headers" })
           }
 
-        } else {
-          res.status(500).send({ 'error': "Invalid column headers" })
-        }
+        }).catch(err => { res.status(403).send({ 'error': "CSV URL unreadable" }) });
+        
       }
     }
 
@@ -178,6 +192,27 @@ app.post('/open-ai-models', async (req, res) => {
         res.status(500).send({ 'error': "No API key found" })
     }
 })
+
+// const csv = require('csv-parser')
+// const { parse } = require("csv-parse");
+// // arr = []
+
+// // let data = fs.readFileSync('./gg.csv', 'utf-8');
+// // data = data.replace(/"/g, '');
+// // data = data.split(/\r?\n/);
+// // data = data.replace(/"(.*?)"/g, (str) => str.replaceAll(',', '###COMMA###'));
+// // console.log(data.length)
+// var arr = []
+// fs.createReadStream("./gg.csv")
+// .pipe(csv())
+// .on("data", function (row) {
+//   arr.push(row);
+// }).on("end", function () {
+//   console.log(arr);
+// })
+// .on("error", function (error) {
+//   console.log(error.message);
+// });
 
 app.listen(port, () => {
   console.log(`listening on PORT: ${port}`)
