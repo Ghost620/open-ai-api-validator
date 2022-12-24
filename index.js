@@ -15,7 +15,7 @@ app.use(bodyParser.urlencoded({ extended: false }))
 app.use(express.json())
 
 app.get('/', (req, res) => {
-  res.status(404).send({ 'error': 'Not found' })
+  res.status(404).send("WELCOME")
 })
 
 app.post('/create-open-ai-model', async (req, res) => {
@@ -84,7 +84,7 @@ app.post('/create-open-ai-model', async (req, res) => {
 
           var header_splitted = response.data.replaceAll('\r', '').split('\n')
 
-          if (header_splitted[0].includes('prompt,completion')) {
+          if (header_splitted[0].includes('prompt') && header_splitted[0].includes('completion')) {
             const response = await axios.get(data['csvUrl'],{ responseType: "stream",});
             response.data
               .pipe(csv())
@@ -92,44 +92,40 @@ app.post('/create-open-ai-model', async (req, res) => {
                 arr.push(row);
               })
               .on("end", async function () {
-  
-                arr.map((item) => {
-                  item.prompt = item.prompt + "\n\n###\n\n",
-                  item.completion = item.completion + "###"
-                })
+
+                const arr2 = arr.map((item) => (
+                  { 
+                    prompt: item.prompt + "\n\n###\n\n",
+                    completion: item.completion + "###"
+                  }
+                ))
   
                 const filename = uuidv4() + '.jsonl';
-                await fs.writeFile(filename, JSON.stringify(arr).replace('[', '').replace(']', '').replaceAll('},{', '}\n{'))
+                await fs.writeFile(filename, JSON.stringify(arr2).replaceAll('[', '').replaceAll(']', '').replaceAll('},{', '}\n{'))
   
                 const configuration = new Configuration({
                   apiKey: data['apiKey'],
                 });
                 const openai = new OpenAIApi(configuration);
-                const responses = await openai.createFile(
+                await openai.createFile(
                   fss.createReadStream(filename),
                   "fine-tune"
-                );
-                await fs.unlink(filename)
-  
-                if (responses.status != 200) {
-                  res.status(responses.status).send({ 'error': responses.error, 'message': "error from Open AI request" })
-                } else {
-                  const response2 = await openai.createFineTune({
+                ).then(async responses => {
+
+                  await openai.createFineTune({
                     training_file: responses.data.id,
                     model: data['model'],
                     n_epochs: data['n_epochs'] ? data['n_epochs'] : 2
-                  });
-                  
-                  if (response2.status == 200) {
+                  }).then(response2 =>{
                     res.status(200).send({ "message": "Success", "id": response2.data.id })
-                  } else {
-                    res.status(response2.status).send({ 'error': response2.error, 'message': "error from Open AI request" })
-                  }
-                }
-  
+                  }).catch(err => { res.status(401).send({ 'error': err.message }) });
+
+                }).catch(err => { res.status(401).send({ 'error': err.message, message: "Invalid API key" }) });
+
+                await fs.unlink(filename)
+
               })
               .on("error", function (error) {
-                console.log('IDHR')
                 res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL"  })
               });
   
@@ -141,9 +137,7 @@ app.post('/create-open-ai-model', async (req, res) => {
         
       }
     }
-
   }
-
 })
 
 app.post('/open-ai-models', async (req, res) => {
