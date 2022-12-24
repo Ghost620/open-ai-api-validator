@@ -65,7 +65,6 @@ app.post('/create-open-ai-model', async (req, res) => {
           res.status(200).send({ "estimate": `~$${count}` })
         }
       }
-
     }
 
   } else {
