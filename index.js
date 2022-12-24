@@ -165,14 +165,27 @@ app.post('/open-ai-models', async (req, res) => {
                 var date = new Date(0);
                 date.setUTCSeconds(utcSeconds);
 
-                return {
-                  id: item.id,
-                  n_epochs: item.hyperparams.n_epochs,
-                  model: item.model,
-                  status: item.status,
-                  created_at: date.toDateString(),
-                  fine_tuned_model: item.fine_tuned_model
-                };
+                if (item.status == "failed") {
+                  return {
+                    id: item.id,
+                    n_epochs: item.hyperparams.n_epochs,
+                    model: item.model,
+                    status: item.status,
+                    created_at: date.toDateString(),
+                    file_error: item.training_files[0].status_details,
+                    fine_tuned_model: item.fine_tuned_model
+                  };
+                } else {
+                  return {
+                    id: item.id,
+                    n_epochs: item.hyperparams.n_epochs,
+                    model: item.model,
+                    status: item.status,
+                    created_at: date.toDateString(),
+                    fine_tuned_model: item.fine_tuned_model
+                  };
+                }
+
               });
 
               res.status(200).send(result.reverse())
@@ -186,27 +199,6 @@ app.post('/open-ai-models', async (req, res) => {
         res.status(500).send({ 'error': "No API key found" })
     }
 })
-
-// const csv = require('csv-parser')
-// const { parse } = require("csv-parse");
-// // arr = []
-
-// // let data = fs.readFileSync('./gg.csv', 'utf-8');
-// // data = data.replace(/"/g, '');
-// // data = data.split(/\r?\n/);
-// // data = data.replace(/"(.*?)"/g, (str) => str.replaceAll(',', '###COMMA###'));
-// // console.log(data.length)
-// var arr = []
-// fs.createReadStream("./gg.csv")
-// .pipe(csv())
-// .on("data", function (row) {
-//   arr.push(row);
-// }).on("end", function () {
-//   console.log(arr);
-// })
-// .on("error", function (error) {
-//   console.log(error.message);
-// });
 
 app.listen(port, () => {
   console.log(`listening on PORT: ${port}`)
