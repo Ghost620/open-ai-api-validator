@@ -126,8 +126,7 @@ app.post('/create-open-ai-model', async (req, res) => {
             .on("error", function (error) {
               res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL"  })
             });
-        }
-        )   
+        })   
         .catch(err => { res.status(403).send({ 'error': "CSV URL unreadable" }) });
         
       }
