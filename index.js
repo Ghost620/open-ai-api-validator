@@ -7,7 +7,7 @@ const fs = require("fs").promises
 const fss = require("fs");
 const { Configuration, OpenAIApi } = require("openai");
 const csv = require('csv-parser')
-const ufs = require("url-file-size");
+//const ufs = require("url-file-size");
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -37,7 +37,6 @@ app.post('/create-open-ai-model', async (req, res) => {
         const num_records = response.data.split('\n').length
         const fileSize = Math.floor(csv_character_length/1000)
         const n_epochs = data['n_epochs'] ? data['n_epochs'] : 2
-
         var count = (csv_character_length / 4) * n_epochs
   
         var condi = true
@@ -108,11 +107,16 @@ app.post('/create-open-ai-model', async (req, res) => {
                 }
               ))
 
-              const fileSize = await ufs(data['csvUrl'])
-                .then(async (size) => {
-                  return Math.floor(size/1000)
+              // const fileSize = await ufs(data['csvUrl'])
+              //   .then(async (size) => {
+              //     return Math.floor(size/1000)
+              //   })
+              //   .catch(console.error);
+
+              var fileSize = await axios.get(data['csvUrl'])
+                .then((response) => {
+                  return Math.floor(response.data.length/1000)
                 })
-                .catch(console.error);
 
               const filename = uuidv4() + '.jsonl';
               await fs.writeFile(filename, JSON.stringify(arr2).replaceAll('[', '').replaceAll(']', '').replaceAll('},{', '}\n{'))
