@@ -7,6 +7,7 @@ const fs = require("fs").promises
 const fss = require("fs");
 const { Configuration, OpenAIApi } = require("openai");
 const csv = require('csv-parser')
+const ufs = require("url-file-size");
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -78,6 +79,8 @@ app.post('/create-open-ai-model', async (req, res) => {
       } else {
 
         var arr = []
+        var charLength = 0
+
         await axios.get(data['csvUrl'], { responseType: "stream",})
         .then(async(response) => {
           
@@ -85,11 +88,12 @@ app.post('/create-open-ai-model', async (req, res) => {
             .pipe(csv())
             .on("data", function (row) {
               arr.push(row);
+              charLength += JSON.stringify(Object.values(row)).replaceAll('[', '').replaceAll(']', '').length
             })
             .on("end", async function () {
           
               var colOne = Object.keys(arr[0])[0]
-              var colTwo = Object.keys(arr[0])[1]
+              var colTwo = Object.keys(arr[0])[1]   
 
               const arr2 = arr.map((item) => (
                 { 
@@ -97,6 +101,12 @@ app.post('/create-open-ai-model', async (req, res) => {
                   completion: item[colTwo] + "###"
                 }
               ))
+
+              const fileSize = await ufs(data['csvUrl'])
+                .then(async (size) => {
+                  return Math.floor(size/1000)
+                })
+                .catch(console.error);
 
               const filename = uuidv4() + '.jsonl';
               await fs.writeFile(filename, JSON.stringify(arr2).replaceAll('[', '').replaceAll(']', '').replaceAll('},{', '}\n{'))
@@ -114,14 +124,13 @@ app.post('/create-open-ai-model', async (req, res) => {
                   training_file: responses.data.id,
                   model: data['model_name'] ? `${data['model']}:${data['model_name']}` : data['model'],
                   n_epochs: data['n_epochs'] ? data['n_epochs'] : 2
-                }).then(response2 =>{
-                  res.status(200).send({ "message": "Success", "id": response2.data.id })
-                }).catch(err => { res.status(401).send({ 'error': err.message }) });
+                }).then(response2 => {
+                  res.status(200).send({ "message": "Success", "id": response2.data.id, "num_records": arr.length, "num_chars": charLength, "file_size": `${fileSize} KB` })
+                }).catch(err => { res.status(401).send({ 'error': err.message, 'message': 'Creation failed' }) });
 
               }).catch(err => { res.status(401).send({ 'error': err.message, message: "Invalid API key" }) });
 
               await fs.unlink(filename)
-
             })
             .on("error", function (error) {
               res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL"  })
@@ -221,3 +230,5 @@ app.listen(port, () => {
 //     }
 //     )
 // });
+
+
