@@ -29,43 +29,49 @@ app.post('/create-open-ai-model', async (req, res) => {
     cond = dataKeys.includes("csvUrl") && data['csvUrl'] != '' ? dataKeys.includes("model") && data['model'] != '' ? true : res.status(500).send({ 'error': "Model not provided" }) : res.status(500).send({ 'error': "CSV URL not provided" })
 
     if (cond == true) {
-      const response = await axios.get(data['csvUrl'])
-      const csv_data = await response.data
 
-      const csv_character_length = csv_data.length
-      const n_epochs = data['n_epochs'] ? data['n_epochs'] : 2
+      await axios.get(data['csvUrl'])
+      .then((response) => {
 
-      var count = (csv_character_length / 4) * n_epochs
+        const csv_character_length = response.data.length
+        const num_records = response.data.split('\n').length
+        const fileSize = Math.floor(csv_character_length/1000)
+        const n_epochs = data['n_epochs'] ? data['n_epochs'] : 2
 
-      var condi = true
-      switch (data['model']) {
-        case 'davinci':
-          var n = 0.00003
-          break;
-        case 'curie':
-          var n = 0.000003
-          break;
-        case 'babbage':
-          var n = 0.0000006
-          break;
-        case 'ada':
-          var n = 0.0000004
-          break;
-        default:
-          condi = false
-          res.status(500).send({ 'error': "Model is incorrect" })
-          break;
+        var count = (csv_character_length / 4) * n_epochs
+  
+        var condi = true
+        switch (data['model']) {
+          case 'davinci':
+            var n = 0.00003
+            break;
+          case 'curie':
+            var n = 0.000003
+            break;
+          case 'babbage':
+            var n = 0.0000006
+            break;
+          case 'ada':
+            var n = 0.0000004
+            break;
+          default:
+            condi = false
+            res.status(500).send({ 'error': "Model is incorrect" })
+            break;
+        }
+  
+        if (condi == true) {
+          count = count * n
+          count = count.toFixed(2)
+          if (count < 0.01) {
+            res.status(200).send({ "estimate": `<$0.01` , "num_records": num_records, "num_chars": csv_character_length, "file_size": fileSize })
+          } else {
+            res.status(200).send({ "estimate": `~$${count}`, "num_records": num_records, "num_chars": csv_character_length, "file_size": fileSize })
+          }
         }
 
-      if (condi == true) {
-        count = count * n
-        count = count.toFixed(2)
-        if (count < 0.01) {
-          res.status(200).send({ "estimate": `<$0.01` })
-        } else {
-          res.status(200).send({ "estimate": `~$${count}` })
-        }
-      }
+      })
+
     }
 
   } else {
@@ -125,7 +131,7 @@ app.post('/create-open-ai-model', async (req, res) => {
                   model: data['model_name'] ? `${data['model']}:${data['model_name']}` : data['model'],
                   n_epochs: data['n_epochs'] ? data['n_epochs'] : 2
                 }).then(response2 => {
-                  res.status(200).send({ "message": "Success", "id": response2.data.id, "num_records": arr.length, "num_chars": charLength, "file_size": `${fileSize} KB` })
+                  res.status(200).send({ "message": "Success", "id": response2.data.id, "num_records": arr.length+1, "num_chars": charLength, "file_size": fileSize })
                 }).catch(err => { res.status(401).send({ 'error': err.message, 'message': 'Creation failed' }) });
 
               }).catch(err => { res.status(401).send({ 'error': err.message, message: "Invalid API key" }) });
@@ -201,34 +207,3 @@ app.post('/open-ai-models', async (req, res) => {
 app.listen(port, () => {
   console.log(`listening on PORT: ${port}`)
 })
-
-
-
-
-
-
-// var arr = []
-// axios.get("https://raw.githubusercontent.com/arainey2022/csv-files/main/some%20data%20-%20data.csv", { responseType: "stream",}).then((response) => {
-  
-//   response.data
-//     .pipe(csv())
-//     .on("data", function (row) {
-//       arr.push(row);
-//     })
-//     .on("end", async function () {
-  
-//       var colOne = Object.keys(arr[0])[0]
-//       var colTwo = Object.keys(arr[0])[1]
-
-//       const arr2 = arr.map((item) => (
-//         { 
-//           prompt: item[colOne] + "\n\n###\n\n",
-//           completion: item[colTwo] + "###"
-//         }
-//       ))
-//       console.log(arr2)
-//     }
-//     )
-// });
-
-
