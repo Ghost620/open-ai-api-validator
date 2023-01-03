@@ -72,73 +72,148 @@ app.post('/create-open-ai-model', async (req, res) => {
 
   } else {
 
-    var cond = false;
-    cond = dataKeys.includes("csvUrl") && data['csvUrl'] != '' ? dataKeys.includes("apiKey") && data['apiKey'] != '' ? dataKeys.includes("model") && data['model'] != '' ? true : res.status(500).send({ 'error': "Model not provided" }) : res.status(500).send({ 'error': "API key not provided" }) : res.status(500).send({ 'error': "CSV URL not provided" })
-    if (cond == true) {
+    if (dataKeys.includes("free") && data['free'] == 'yes') {
 
-      if (!data['csvUrl'].includes('.csv')) {
-        res.status(500).send({ 'error': "Invalid file format" })
-      } else {
-
-        var arr = []
-        var charLength = 0
-
-        await axios.get(data['csvUrl'], { responseType: "stream", })
-          .then(async (response) => {
-
-            await response.data
-              .pipe(csv())
-              .on("data", function(row) {
-                arr.push(row);
-                charLength += JSON.stringify(Object.values(row)).replaceAll('[', '').replaceAll(']', '').length
-              })
-              .on("end", async function() {
-
-                var colOne = Object.keys(arr[0])[0]
-                var colTwo = Object.keys(arr[0])[1]
-
-                const arr2 = arr.map((item) => (
-                  {
-                    prompt: item[colOne] + "\n\n###\n\n",
-                    completion: item[colTwo] + "###"
-                  }
-                ))
-
-                var fileSize = await axios.get(data['csvUrl'])
-                  .then((response) => {
-                    return response.data.length / 1000
-                  })
-
-                const filename = uuidv4() + '.jsonl';
-                await fs.writeFile(filename, JSON.stringify(arr2).replaceAll('[', '').replaceAll(']', '').replaceAll('},{', '}\n{'))
-
-                const configuration = new Configuration({
-                  apiKey: data['apiKey'],
+      var cond = false;
+      cond = dataKeys.includes("csvUrl") && data['csvUrl'] != '' ? dataKeys.includes("apiKey") && data['apiKey'] != '' ? dataKeys.includes("model") && data['model'] != '' ? true : res.status(500).send({ 'error': "Model not provided" }) : res.status(500).send({ 'error': "API key not provided" }) : res.status(500).send({ 'error': "CSV URL not provided" })
+      if (cond == true) {
+  
+        if (!data['csvUrl'].includes('.csv')) {
+          res.status(500).send({ 'error': "Invalid file format" })
+        } else {
+  
+          var arr = []
+          var charLength = 0
+  
+          await axios.get(data['csvUrl'], { responseType: "stream", })
+            .then(async (response) => {
+  
+              await response.data
+                .pipe(csv())
+                .on("data", function(row) {
+                  arr.push(row);
+                  charLength += JSON.stringify(Object.values(row)).replaceAll('[', '').replaceAll(']', '').length
+                })
+                .on("end", async function() {
+  
+                  var colOne = Object.keys(arr[0])[0]
+                  var colTwo = Object.keys(arr[0])[1]
+  
+                  const arr2 = arr.map((item) => (
+                    {
+                      prompt: item[colOne] + "\n\n###\n\n",
+                      completion: item[colTwo] + "###"
+                    }
+                  ))
+  
+                  var fileSize = await axios.get(data['csvUrl'])
+                    .then((response) => {
+                      return response.data.length / 1000
+                    })
+  
+                  const filename = uuidv4() + '.jsonl';
+                  await fs.writeFile(filename, JSON.stringify(arr2.slice(0,10)).replaceAll('[', '').replaceAll(']', '').replaceAll('},{', '}\n{'))
+  
+                  const configuration = new Configuration({
+                    apiKey: data['apiKey'],
+                  });
+                  const openai = new OpenAIApi(configuration);
+                  await openai.createFile(
+                    fss.createReadStream(filename),
+                    "fine-tune"
+                  ).then(async responses => {
+  
+                    await openai.createFineTune({
+                      training_file: responses.data.id,
+                      model: data['model'] ? data['model'] : 'davinci',
+                      n_epochs: data['n_epochs'] ? data['n_epochs'] : 2,
+                      suffix: data['model_name'] ? 'trial-'+data['model_name'] : 'trial-my-model'
+                    }).then(response2 => {
+                      res.status(200).send({ "message": "Success", "id": response2.data.id, "num_records": arr.length + 1, "num_chars": charLength, "file_size": fileSize })
+                    }).catch(err => { res.status(401).send({ 'error': err.message, 'message': 'Creation failed' }) });
+  
+                  }).catch(err => { res.status(401).send({ 'error': err.message, message: "Invalid API key" }) });
+  
+                  await fs.unlink(filename)
+                })
+                .on("error", function(error) {
+                  res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL" })
                 });
-                const openai = new OpenAIApi(configuration);
-                await openai.createFile(
-                  fss.createReadStream(filename),
-                  "fine-tune"
-                ).then(async responses => {
+            })
+            .catch(err => { res.status(403).send({ 'error': "CSV URL unreadable" }) });
+        }
+      }
 
-                  await openai.createFineTune({
-                    training_file: responses.data.id,
-                    model: data['model'] ? data['model'] : 'davinci',
-                    n_epochs: data['n_epochs'] ? data['n_epochs'] : 2,
-                    suffix: data['model_name'] ? data['model_name'] : 'my-model'
-                  }).then(response2 => {
-                    res.status(200).send({ "message": "Success", "id": response2.data.id, "num_records": arr.length + 1, "num_chars": charLength, "file_size": fileSize })
-                  }).catch(err => { res.status(401).send({ 'error': err.message, message: 'Creation failed' }) });
-
-                }).catch(err => { res.status(401).send({ 'error': err.message, message: "Invalid API key" }) });
-
-                await fs.unlink(filename)
-              })
-              .on("error", function(error) {
-                res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL" })
-              });
-          })
-          .catch(err => { res.status(403).send({ 'error': "CSV URL unreadable" }) });
+    } else {
+      
+      var cond = false;
+      cond = dataKeys.includes("csvUrl") && data['csvUrl'] != '' ? dataKeys.includes("apiKey") && data['apiKey'] != '' ? dataKeys.includes("model") && data['model'] != '' ? true : res.status(500).send({ 'error': "Model not provided" }) : res.status(500).send({ 'error': "API key not provided" }) : res.status(500).send({ 'error': "CSV URL not provided" })
+      if (cond == true) {
+  
+        if (!data['csvUrl'].includes('.csv')) {
+          res.status(500).send({ 'error': "Invalid file format" })
+        } else {
+  
+          var arr = []
+          var charLength = 0
+  
+          await axios.get(data['csvUrl'], { responseType: "stream", })
+            .then(async (response) => {
+  
+              await response.data
+                .pipe(csv())
+                .on("data", function(row) {
+                  arr.push(row);
+                  charLength += JSON.stringify(Object.values(row)).replaceAll('[', '').replaceAll(']', '').length
+                })
+                .on("end", async function() {
+  
+                  var colOne = Object.keys(arr[0])[0]
+                  var colTwo = Object.keys(arr[0])[1]
+  
+                  const arr2 = arr.map((item) => (
+                    {
+                      prompt: item[colOne] + "\n\n###\n\n",
+                      completion: item[colTwo] + "###"
+                    }
+                  ))
+  
+                  var fileSize = await axios.get(data['csvUrl'])
+                    .then((response) => {
+                      return response.data.length / 1000
+                    })
+  
+                  const filename = uuidv4() + '.jsonl';
+                  await fs.writeFile(filename, JSON.stringify(arr2).replaceAll('[', '').replaceAll(']', '').replaceAll('},{', '}\n{'))
+  
+                  const configuration = new Configuration({
+                    apiKey: data['apiKey'],
+                  });
+                  const openai = new OpenAIApi(configuration);
+                  await openai.createFile(
+                    fss.createReadStream(filename),
+                    "fine-tune"
+                  ).then(async responses => {
+  
+                    await openai.createFineTune({
+                      training_file: responses.data.id,
+                      model: data['model'] ? data['model'] : 'davinci',
+                      n_epochs: data['n_epochs'] ? data['n_epochs'] : 2,
+                      suffix: data['model_name'] ? data['model_name'] : 'my-model'
+                    }).then(response2 => {
+                      res.status(200).send({ "message": "Success", "id": response2.data.id, "num_records": arr.length + 1, "num_chars": charLength, "file_size": fileSize })
+                    }).catch(err => { res.status(401).send({ 'error': err.message, 'message': 'Creation failed' }) });
+  
+                  }).catch(err => { res.status(401).send({ 'error': err.message, message: "Invalid API key" }) });
+  
+                  await fs.unlink(filename)
+                })
+                .on("error", function(error) {
+                  res.status(response.status).send({ 'error': response.error, 'message': "error reading CSV URL" })
+                });
+            })
+            .catch(err => { res.status(403).send({ 'error': "CSV URL unreadable" }) });
+        }
       }
     }
   }
