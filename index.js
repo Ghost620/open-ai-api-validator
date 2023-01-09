@@ -233,36 +233,44 @@ app.post('/open-ai-models', async (req, res) => {
       });
       const openai = new OpenAIApi(configuration);
       await openai.listFineTunes().then(async latest_response => {
+        
+        if (data2["model_id"]) {
+          const single_model = latest_response.data.data.filter((item) => (item.id === data2["model_id"]))
+          res.status(200).send( { "status": single_model[0].status, "fine_tuned_model": single_model[0].fine_tuned_model })
+        } else {
+          
+          var result = latest_response.data.data.map((item) => {
+            var utcSeconds = item.created_at;
+            var date = new Date(0);
+            date.setUTCSeconds(utcSeconds);
+  
+            if (item.status == "failed") {
+              return {
+                id: item.id,
+                n_epochs: item.hyperparams.n_epochs,
+                model: item.model,
+                status: item.status,
+                created_at: date.toDateString(),
+                file_error: item.training_files[0].status_details,
+                fine_tuned_model: item.fine_tuned_model
+              };
+            } else {
+              return {
+                id: item.id,
+                n_epochs: item.hyperparams.n_epochs,
+                model: item.model,
+                status: item.status,
+                created_at: date.toDateString(),
+                fine_tuned_model: item.fine_tuned_model
+              };
+            }
+  
+          });
+          for (let index = 0; index < result.length; index++) { const elem = result[index] }
+          res.status(200).send(result.reverse())
 
-        var result = latest_response.data.data.map((item) => {
-          var utcSeconds = item.created_at;
-          var date = new Date(0);
-          date.setUTCSeconds(utcSeconds);
-
-          if (item.status == "failed") {
-            return {
-              id: item.id,
-              n_epochs: item.hyperparams.n_epochs,
-              model: item.model,
-              status: item.status,
-              created_at: date.toDateString(),
-              file_error: item.training_files[0].status_details,
-              fine_tuned_model: item.fine_tuned_model
-            };
-          } else {
-            return {
-              id: item.id,
-              n_epochs: item.hyperparams.n_epochs,
-              model: item.model,
-              status: item.status,
-              created_at: date.toDateString(),
-              fine_tuned_model: item.fine_tuned_model
-            };
-          }
-
-        });
-        for (let index = 0; index < result.length; index++) { const elem = result[index] }
-        res.status(200).send(result.reverse())
+        }
+        
       }).catch(err => { res.status(400).send({ 'error': err.message }) })
 
     } catch (err) {
