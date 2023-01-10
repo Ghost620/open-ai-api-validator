@@ -46,15 +46,8 @@ app.get('/twitter', async (req, res) => {
       userToken: req.session.tokenSet.access_token,
       userRefreshToken: req.session.tokenSet.refresh_token
     }
-    
-  // res.status(200).send({user: {
-  //   userId: datas.data.id,
-  //   userName: datas.data.username,
-  //   userToken: req.session.tokenSet.access_token,
-  //   userRefreshToken: req.session.tokenSet.refresh_token
-  // }})
   
-  res.redirect(`https://no-code-ai-model-builder.com/version-test/twitter-login?user=${JSON.stringify(user)}`)
+  res.redirect(`https://no-code-ai-model-builder.com/version-test/twitter-login?userId=${user.userId}&userName=${user.userName}&userToken=${user.userToken}&userRefreshToken=${user.userRefreshToken}`)
   
 })
 
