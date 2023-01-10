@@ -15,7 +15,7 @@ app.get('/', (req, res) => {
 })
 
 app.use(session({
-  name: 'EXAMPLE',
+  name: crypto.randomBytes(32).toString('hex').slice(1,10),
   secret: [crypto.randomBytes(32).toString('hex')],
   resave: false,
   saveUninitialized: true
